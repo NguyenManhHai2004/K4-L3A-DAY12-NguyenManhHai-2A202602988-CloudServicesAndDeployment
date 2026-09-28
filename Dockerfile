@@ -79,4 +79,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # 0.0.0.0 (không phải 127.0.0.1): bind vào localhost thì bên ngoài container
 # không gọi vào được. Dùng `sh -c` để shell mở rộng ${PORT:-8000}: dạng mảng
 # thuần của CMD không đọc được biến môi trường.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+#
+# `exec` là then chốt cho graceful shutdown (CP4): nếu thiếu, `sh` giữ PID 1 và
+# uvicorn chỉ là process con. Docker/cloud gửi SIGTERM tới PID 1 (là sh), mà sh
+# không chuyển tiếp cho con → uvicorn không bao giờ biết mình sắp tắt, request
+# đang chạy bị cắt và container bị SIGKILL. `exec` thay thế chính tiến trình sh
+# bằng uvicorn, nên uvicorn trở thành PID 1 và nhận thẳng SIGTERM.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -44,7 +44,20 @@ class Lifecycle:
         tham số này. Không làm gì nặng ở đây (không gọi mạng, không ghi file)
         — handler chạy xen giữa bytecode.
         """
-        raise NotImplementedError("TODO (CP4): cài đặt request_shutdown")
+        # Việc DUY NHẤT phải làm trong handler: bật cờ. /health và /ready đọc
+        # cờ này để trả 503, load balancer rút instance khỏi vòng xoay. Handler
+        # chạy xen giữa bytecode nên không được gọi mạng hay ghi file ở đây.
+        self.shutting_down = True
+
+        # Nhường lại cho handler cũ (của uvicorn). Mỗi tín hiệu chỉ có MỘT
+        # handler; đăng ký handler của ta là ghi đè handler của uvicorn — thứ
+        # thật sự dừng server. Quên bước này thì app bật cờ "đang tắt" rồi chạy
+        # mãi cho tới khi bị SIGKILL, đúng cái graceful shutdown muốn tránh.
+        # callable(): handler cũ có thể là signal.SIG_DFL / SIG_IGN (không gọi
+        # được) hoặc None, khi đó bỏ qua.
+        previous = self._previous.get(signum)
+        if callable(previous):
+            previous(signum, frame)
 
     def install(self) -> None:
         """Đăng ký handler cho SIGTERM và SIGINT, nhớ lại handler cũ.
@@ -56,7 +69,22 @@ class Lifecycle:
 
         SIGTERM: orchestrator yêu cầu tắt. SIGINT: bạn bấm Ctrl+C.
         """
-        raise NotImplementedError("TODO (CP4): cài đặt install")
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            current = signal.getsignal(sig)
+
+            # Phòng gọi install() hai lần: lần hai sẽ "nhớ" chính
+            # request_shutdown làm handler cũ, rồi request_shutdown gọi lại
+            # chính nó → đệ quy vô hạn. Đã đăng ký rồi thì bỏ qua.
+            if current == self.request_shutdown:
+                continue
+
+            # Nhớ handler cũ TRƯỚC, rồi mới ghi đè — thứ tự này quan trọng
+            # vì sau khi ghi đè thì không còn cách nào lấy lại handler cũ.
+            self._previous[sig] = current
+
+            # Truyền THAM CHIẾU hàm (không có dấu ngoặc). Viết
+            # `self.request_shutdown()` sẽ gọi hàm ngay và đăng ký kết quả None.
+            signal.signal(sig, self.request_shutdown)
 
 
 # Một instance dùng chung cho cả app

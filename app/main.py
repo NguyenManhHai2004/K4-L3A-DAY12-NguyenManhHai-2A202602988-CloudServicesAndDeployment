@@ -115,7 +115,21 @@ def ready(store: ConversationStore = Depends(get_store)):
     Khác /health ở chỗ: endpoint này ĐƯỢC PHÉP kiểm tra dependency. Load
     balancer dùng nó để quyết định có đẩy request vào instance này không.
     """
-    raise NotImplementedError("TODO (CP4): cài đặt /ready")
+    # Kiểm tra theo thứ tự: đang tắt thì khỏi cần hỏi Redis nữa.
+    if lifecycle.shutting_down:
+        return JSONResponse(status_code=503, content={"status": "shutting_down"})
+
+    # Khác /health: ở đây ĐƯỢC PHÉP (và cần) hỏi dependency. Redis lỗi → 503
+    # để load balancer ngừng gửi request vào instance này. Nhưng đây chỉ là
+    # "tạm ngừng nhận khách", KHÔNG khiến container bị restart — chính vì vậy
+    # việc kiểm tra Redis nằm ở /ready chứ không phải /health. ping() đã nuốt
+    # exception nên không bao giờ làm endpoint này trả 500.
+    if not store.ping():
+        return JSONResponse(
+            status_code=503, content={"status": "not ready", "redis": False}
+        )
+
+    return {"status": "ready", "redis": True}
 
 
 # ─────────────────────────────────────────────────────────────

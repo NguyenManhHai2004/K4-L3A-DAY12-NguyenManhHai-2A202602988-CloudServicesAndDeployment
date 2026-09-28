@@ -6,7 +6,7 @@
 #
 # Service `agent` (đã hoàn thành):
 #   [x] build từ Dockerfile trong thư mục hiện tại
-#   [x] map cổng ra ngoài (8000:8000)
+#   [x] cổng ra ngoài do nginx nhận (8000:80) để `--scale agent=3` không tranh cổng
 #   [x] KHÔNG viết secret thẳng vào file này — dùng nội suy biến môi trường
 #       `${AGENT_API_KEY}` (docker compose tự đọc từ file .env cùng thư mục)
 #   [x] REDIS_URL trỏ tới `redis://redis:6379/0` — trong compose, tên service
@@ -14,9 +14,8 @@
 #   [x] depends_on: redis
 #   [x] healthcheck gọi /health
 #
-# MỞ RỘNG TÙY CHỌN: thêm service `nginx` làm load balancer
-# (không phải bonus chấm điểm riêng; nginx/nginx.conf đã có sẵn)
-#     docker compose up --scale agent=3
+# Service `nginx` (đã thêm ở CP4) làm load balancer, dùng nginx/nginx.conf có sẵn:
+#     docker compose up -d --scale agent=3
 #
 # Kiểm tra: pytest tests/test_cp2.py -v
 # ═══════════════════════════════════════════════════════════════════
@@ -39,12 +38,13 @@ services:
     # Build image từ Dockerfile ở thư mục hiện tại (multi-stage, non-root).
     build: .
 
-    # host:container. Vế phải phải khớp cổng uvicorn nghe trong container
-    # (PORT mặc định 8000 trong Dockerfile).
-    # Lưu ý: cổng host cố định thì `--scale agent=3` sẽ 3 container tranh
-    # một cổng và lỗi — sẽ xử lý ở CP4 (dải cổng hoặc nginx).
-    ports:
-      - "8000:8000"
+    # CỐ Ý không có `ports:` ở service này. Nếu map cổng host cố định
+    # ("8000:8000") thì `--scale agent=3` sẽ có 3 container cùng đòi cổng 8000
+    # và lỗi "port is already allocated". Thay vào đó agent chỉ mở cổng trong
+    # mạng nội bộ của compose, còn nginx (bên dưới) là cửa duy nhất ra ngoài
+    # và chia request cho các bản sao agent.
+    expose:
+      - "8000"
 
     environment:
       # Nội suy ${...}: compose tự đọc giá trị từ file `.env` cùng thư mục.
@@ -73,6 +73,23 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Load balancer: nhận request ở cổng host 8000 và chia vòng tròn (round-robin)
+  # cho mọi bản sao của `agent`. Docker DNS trả về IP của cả 3 container khi
+  # hỏi hostname `agent`. Nhờ vậy `curl localhost:8000/...` dùng được dù chạy
+  # 1 hay 3 instance, và history_length vẫn tăng dần khi request rơi vào các
+  # container khác nhau — bằng chứng app stateless (state nằm ở Redis).
+  #     docker compose up -d --scale agent=3
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8000:80"
+    volumes:
+      # :ro = chỉ đọc, container không sửa được file cấu hình trên máy bạn
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      agent:
+        condition: service_healthy
 
 volumes:
   redis-data:
