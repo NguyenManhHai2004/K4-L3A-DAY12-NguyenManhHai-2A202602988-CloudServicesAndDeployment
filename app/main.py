@@ -87,7 +87,20 @@ def health():
     lời câu hỏi "có cần restart container này không?". Nếu nó phụ thuộc
     Redis, Redis chết một nhịp là cả cụm container bị restart theo.
     """
-    raise NotImplementedError("TODO (CP1/CP4): cài đặt /health")
+    # Hàm này CỐ Ý không có tham số nào (không Depends, không verify_api_key):
+    #   - Không nhận Depends(get_store)... → không chạm Redis. Redis chết một
+    #     nhịp mà /health cũng lỗi thì platform sẽ restart cả cụm container.
+    #   - Không cần API key → probe của platform không gửi key, bắt buộc key
+    #     là tự khóa mình ngoài cửa.
+    # Bộ test kiểm tra điều này bằng inspect.signature(health).
+
+    # Nhận SIGTERM (đang deploy/scale-down): báo 503 để load balancer ngừng
+    # đẩy request mới vào instance này trong lúc nó xử lý nốt các request dở.
+    if lifecycle.shutting_down:
+        return JSONResponse(status_code=503, content={"status": "shutting_down"})
+
+    # Bình thường: chỉ trả lời "process còn sống" — FastAPI mặc định trả 200.
+    return {"status": "ok", "service": SERVICE_NAME, "version": SERVICE_VERSION}
 
 
 @app.get("/ready")
