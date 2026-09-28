@@ -15,7 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Toàn bộ cấu hình của service.
 
-    TODO (CP1): khai báo các trường dưới đây. pydantic-settings tự đọc biến
+    Cách làm (CP1): khai báo các trường dưới đây. pydantic-settings tự đọc biến
     môi trường theo tên trường (không phân biệt hoa thường), nên trường
     ``agent_api_key`` sẽ lấy giá trị từ biến ``AGENT_API_KEY``.
 

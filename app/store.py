@@ -47,7 +47,7 @@ class ConversationStore:
     def ping(self) -> bool:
         """Redis có trả lời không? Dùng cho endpoint /ready.
 
-        TODO (CP4): gọi ``self.client.ping()`` trong try/except.
+        Cách làm (CP4): gọi ``self.client.ping()`` trong try/except.
         Trả ``True`` nếu thành công, ``False`` nếu có bất kỳ Exception nào
         (mất mạng, sai mật khẩu, Redis chưa khởi động...).
         """
@@ -63,7 +63,7 @@ class ConversationStore:
     def append(self, user_id: str, role: str, content: str) -> None:
         """Ghi thêm một lượt vào lịch sử.
 
-        TODO (CP4):
+        Cách làm (CP4):
           1. ``self.client.rpush(key, json.dumps({"role": role, "content": content},
              ensure_ascii=False))``
           2. ``self.client.ltrim(key, -HISTORY_MAX_MESSAGES, -1)`` — chỉ giữ
@@ -94,7 +94,7 @@ class ConversationStore:
     def get_history(self, user_id: str) -> list[dict]:
         """Đọc lịch sử hội thoại, cũ nhất trước.
 
-        TODO (CP4): ``self.client.lrange(key, 0, -1)`` rồi ``json.loads``
+        Cách làm (CP4): ``self.client.lrange(key, 0, -1)`` rồi ``json.loads``
         từng phần tử. Chưa có gì → trả về list rỗng.
         """
         # LRANGE 0..-1 = toàn bộ list, cũ nhất trước. Key chưa tồn tại thì

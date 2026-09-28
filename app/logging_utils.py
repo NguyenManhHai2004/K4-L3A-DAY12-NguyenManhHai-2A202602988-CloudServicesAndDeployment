@@ -20,7 +20,7 @@ def utc_now_iso() -> str:
 def log_event(event: str, level: str = "info", **fields) -> str:
     """Ghi một dòng log JSON ra stdout.
 
-    TODO (CP1): tạo dict gồm tối thiểu 3 khóa
+    Cách làm (CP1): tạo dict gồm tối thiểu 3 khóa
         - "event"     : tên sự kiện, lấy từ tham số ``event``
         - "level"     : mức log, VIẾT THƯỜNG (dùng ``level.lower()``)
         - "timestamp" : ``utc_now_iso()``

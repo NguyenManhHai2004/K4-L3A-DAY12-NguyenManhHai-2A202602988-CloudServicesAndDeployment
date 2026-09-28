@@ -25,7 +25,7 @@ class Lifecycle:
     def request_shutdown(self, signum=None, frame=None) -> None:
         """Signal handler: đánh dấu process đang tắt dần.
 
-        TODO (CP4):
+        Cách làm (CP4):
           1. ``self.shutting_down = True``
           2. Gọi lại handler cũ nếu có::
 
@@ -62,7 +62,7 @@ class Lifecycle:
     def install(self) -> None:
         """Đăng ký handler cho SIGTERM và SIGINT, nhớ lại handler cũ.
 
-        TODO (CP4): với mỗi tín hiệu trong ``(signal.SIGTERM, signal.SIGINT)``:
+        Cách làm (CP4): với mỗi tín hiệu trong ``(signal.SIGTERM, signal.SIGINT)``:
 
             self._previous[sig] = signal.getsignal(sig)   # nhớ handler cũ
             signal.signal(sig, self.request_shutdown)     # rồi mới ghi đè
