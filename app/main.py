@@ -158,7 +158,52 @@ def ask(
     ``user_id`` do ``verify_api_key`` trả về, nên request không có API key
     hợp lệ sẽ dừng ở 401 trước khi chạm vào bất cứ dòng nào ở đây.
     """
-    raise NotImplementedError("TODO (CP3/CP4): cài đặt /ask")
+    # Bước 0 (đã xảy ra trước khi vào hàm): FastAPI chạy verify_api_key qua
+    # Depends. Thiếu/sai khóa → 401 và dừng ở đó, nên request không hợp lệ
+    # không bao giờ chạm tới limiter (không tiêu quota của ai) hay LLM.
+
+    # 1. Rate limit: gọi quá nhanh → 429. Đặt TRƯỚC cost guard vì rẻ hơn và
+    #    chặn được kẻ spam sớm nhất. Lưu ý check() cũng ghi nhận request này.
+    limiter.check(user_id)
+
+    # 2. Cost guard: đã hết ngân sách tháng → 402. Kiểm tra TRƯỚC khi gọi LLM
+    #    vì tiền mất ở bước gọi LLM; chặn sau thì vừa trả tiền vừa trả lỗi.
+    guard.check(user_id)
+
+    # 3. Lấy lịch sử hội thoại TRƯỚC khi ghi lượt mới, để history_length trả
+    #    về là số message đã có, không tính câu hỏi hiện tại.
+    history = store.get_history(user_id)
+
+    # 4. Gọi LLM (mock: tất định, không tốn tiền thật).
+    result = ask_llm(payload.question, history)
+
+    # 5. Lưu cả câu hỏi lẫn câu trả lời vào store (Redis ở bản thật) để request
+    #    sau — kể cả rơi vào container khác — vẫn thấy được ngữ cảnh.
+    store.append(user_id, "user", payload.question)
+    store.append(user_id, "assistant", result["answer"])
+
+    # 6. Ghi nhận chi phí SAU khi LLM đã trả kết quả (lúc này mới biết số
+    #    token thật). Cộng dồn vào key cost:<user>:<YYYY-MM>.
+    guard.record(user_id, result["cost_usd"])
+
+    # 7. Log JSON một dòng để cloud lọc/đếm được (xem app/logging_utils.py).
+    #    Chỉ log số liệu, không log nội dung câu hỏi (có thể chứa dữ liệu nhạy cảm).
+    log_event(
+        "ask_completed",
+        user_id=user_id,
+        tokens_in=result["tokens_in"],
+        tokens_out=result["tokens_out"],
+        cost_usd=result["cost_usd"],
+    )
+
+    # 8. Trả response.
+    return {
+        "answer": result["answer"],
+        "user_id": user_id,
+        "history_length": len(history),
+        "cost_usd": result["cost_usd"],
+        "tokens": {"in": result["tokens_in"], "out": result["tokens_out"]},
+    }
 
 
 if __name__ == "__main__":
