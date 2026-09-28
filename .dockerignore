@@ -1,6 +1,35 @@
-# TODO (CP2): file này quyết định thứ KHÔNG được copy vào image.
-# Bỏ sót .env = leak secret vào image. Bỏ sót .git = image phình to.
-# Bổ sung đủ các mục còn thiếu — xem tests/test_cp2.py để biết yêu cầu.
+# CP2 — Quyết định thứ KHÔNG được đưa vào build context (và vào image).
+#
+# Docker gửi toàn bộ thư mục hiện tại (build context) cho daemon trước khi
+# build. Mọi thứ không bị ignore ở đây đều có thể bị `COPY` vào image, rồi
+# theo image lên registry/cloud. Vì vậy file này vừa là chốt chặn bảo mật,
+# vừa làm build nhanh và image gọn hơn.
 
+# ── Secret: TUYỆT ĐỐI không để lọt vào image ────────────────────
+# Secret phải truyền lúc chạy (biến môi trường), không nướng vào image.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Lịch sử git: nặng, và không có ích gì khi chạy app ──────────
 .git
 .gitignore
+
+# ── Môi trường ảo và cache của máy bạn ──────────────────────────
+# .venv chứa thư viện build cho Windows, không chạy được trong container
+# Linux; cài lại bằng `pip install` trong Dockerfile mới đúng.
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+
+# ── Thứ không cần lúc chạy ──────────────────────────────────────
+tests
+screenshots
+solution
+
+# LƯU Ý: KHÔNG được ignore `app`, `utils`, `requirements.txt` — image cần
+# chúng. Ignore nhầm thì build báo "not found" hoặc app không import được.

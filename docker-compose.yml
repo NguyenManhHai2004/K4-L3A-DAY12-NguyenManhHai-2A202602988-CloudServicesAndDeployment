@@ -4,15 +4,15 @@
 # Service `redis` đã cho sẵn — chạy ngay từ Block 1 để có Redis mà code:
 #     docker compose up -d redis
 #
-# NHIỆM VỤ: bổ sung service `agent`. Yêu cầu:
-#   [ ] build từ Dockerfile trong thư mục hiện tại
-#   [ ] map cổng ra ngoài (8000:8000)
-#   [ ] KHÔNG viết secret thẳng vào file này — dùng nội suy biến môi trường
+# Service `agent` (đã hoàn thành):
+#   [x] build từ Dockerfile trong thư mục hiện tại
+#   [x] map cổng ra ngoài (8000:8000)
+#   [x] KHÔNG viết secret thẳng vào file này — dùng nội suy biến môi trường
 #       `${AGENT_API_KEY}` (docker compose tự đọc từ file .env cùng thư mục)
-#   [ ] REDIS_URL trỏ tới `redis://redis:6379/0` — trong compose, tên service
+#   [x] REDIS_URL trỏ tới `redis://redis:6379/0` — trong compose, tên service
 #       chính là hostname
-#   [ ] depends_on: redis
-#   [ ] healthcheck gọi /health
+#   [x] depends_on: redis
+#   [x] healthcheck gọi /health
 #
 # MỞ RỘNG TÙY CHỌN: thêm service `nginx` làm load balancer
 # (không phải bonus chấm điểm riêng; nginx/nginx.conf đã có sẵn)
@@ -35,10 +35,44 @@ services:
       timeout: 3s
       retries: 5
 
-  # TODO (CP2): khai báo service `agent` ở đây
-  # agent:
-  #   build: .
-  #   ...
+  agent:
+    # Build image từ Dockerfile ở thư mục hiện tại (multi-stage, non-root).
+    build: .
+
+    # host:container. Vế phải phải khớp cổng uvicorn nghe trong container
+    # (PORT mặc định 8000 trong Dockerfile).
+    # Lưu ý: cổng host cố định thì `--scale agent=3` sẽ 3 container tranh
+    # một cổng và lỗi — sẽ xử lý ở CP4 (dải cổng hoặc nginx).
+    ports:
+      - "8000:8000"
+
+    environment:
+      # Nội suy ${...}: compose tự đọc giá trị từ file `.env` cùng thư mục.
+      # KHÔNG viết khóa thật vào file này vì docker-compose.yml được commit.
+      AGENT_API_KEY: ${AGENT_API_KEY}
+      # Trong compose, hostname của một container chính là TÊN SERVICE.
+      # `localhost` trong container agent là chính agent, không phải Redis,
+      # nên dùng localhost ở đây sẽ báo "Connection refused".
+      REDIS_URL: redis://redis:6379/0
+
+    # Chờ redis healthy (không chỉ "đã start") rồi mới bật agent, tránh agent
+    # khởi động khi Redis chưa nhận kết nối.
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    # Cùng ý với HEALTHCHECK trong Dockerfile, nhưng để compose biết khi nào
+    # agent sẵn sàng (hiện ở cột STATUS của `docker compose ps`).
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   redis-data:
